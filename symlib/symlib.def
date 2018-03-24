@@ -1,2 +1,2 @@
 EXPORTS
-initsymlib
+PyInit_symlib

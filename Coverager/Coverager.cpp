@@ -187,10 +187,17 @@ VOID InstCallHandler(ADDRINT Address, ADDRINT BranchTargetAddress)
         if (m_ThreadCalls.find(ThreadIndex) != m_ThreadCalls.end())
         {
             // log call tree branch
+#if _WIN64
+            fprintf(
+                m_ThreadCalls[ThreadIndex].f, "0x%.8llx:0x%.8llx\r\n", 
+                m_ThreadCalls[ThreadIndex].Address.top(), BranchTargetAddress
+                );
+#else
             fprintf(
                 m_ThreadCalls[ThreadIndex].f, "0x%.8x:0x%.8x\r\n", 
                 m_ThreadCalls[ThreadIndex].Address.top(), BranchTargetAddress
-            );
+                );
+#endif
 
             // push target routine address to the top of call stack
             m_ThreadCalls[ThreadIndex].Address.push(BranchTargetAddress);
@@ -327,7 +334,11 @@ const string *LookupSymbol(ADDRINT Address)
             ADDRINT Offset = Address - (*it).second.first;
             std::string Name = (*it).first;
 
+#if _WIN64
+            sprintf(RetName, "%s+%llx", Name.c_str(), Offset);
+#else
             sprintf(RetName, "%s+%x", Name.c_str(), Offset);
+#endif         
             Found = true;
             break;
         }
@@ -335,7 +346,11 @@ const string *LookupSymbol(ADDRINT Address)
 
     if (!Found) 
     {
+#if _WIN64
+        sprintf(RetName, "?%#llx", Address);
+#else
         sprintf(RetName, "?%#x", Address);
+#endif
     }
 
     return new string(RetName);
@@ -371,13 +386,23 @@ VOID Fini(INT32 ExitCode, VOID *v)
         fprintf(f, "; =============================================\r\n");
         fprintf(f, "[coverager]\r\n");
         fprintf(f, "cmdline = %s ; program command line\r\n", m_CommandLine.c_str());
+#if _WIN64
         fprintf(f, "pid = %d ; process ID\r\n", m_ProcessId);
-        fprintf(f, "threads = %d ; number of threads\r\n", m_ThreadCount);
+        fprintf(f, "threads = %zd ; number of threads\r\n", m_ThreadCount);
+        fprintf(f, "modules = %zd ; number of modules\r\n", m_ModuleList.size());
+        fprintf(f, "routines = %zd ; number of routines\r\n", m_RoutinesList.size());
+        fprintf(f, "blocks = %zd ; number of basic blocks\r\n", m_BasicBlocks.size());
+        fprintf(f, "total_size = %d ; Total coverage size\r\n", CoverageSize);
+        fprintf(f, "time = %lld ; Execution time in seconds\r\n", Now - m_StartTime);
+#else
+        fprintf(f, "pid = %d ; process ID\r\n", m_ProcessId);
+        fprintf(f, "threads = %lld ; number of threads\r\n", m_ThreadCount);
         fprintf(f, "modules = %d ; number of modules\r\n", m_ModuleList.size());
         fprintf(f, "routines = %d ; number of routines\r\n", m_RoutinesList.size());
         fprintf(f, "blocks = %d ; number of basic blocks\r\n", m_BasicBlocks.size());
         fprintf(f, "total_size = %d ; Total coverage size\r\n", CoverageSize);
         fprintf(f, "time = %d ; Execution time in seconds\r\n", Now - m_StartTime);
+#endif
         fprintf(f, "; =============================================\r\n");        
 
         fclose(f);
@@ -397,10 +422,17 @@ VOID Fini(INT32 ExitCode, VOID *v)
             const string *Symbol = LookupSymbol((*it).first.first);
 
             // dump single basic block information
+#if _WIN64
+            fprintf(
+                f, "0x%.8llx:0x%.8x:%d:%s:%d\r\n", 
+                (*it).first.first, (*it).first.second, (*it).second.Instructions, Symbol->c_str(), (*it).second.Calls
+                );
+#else
             fprintf(
                 f, "0x%.8x:0x%.8x:%d:%s:%d\r\n", 
                 (*it).first.first, (*it).first.second, (*it).second.Instructions, Symbol->c_str(), (*it).second.Calls
-            );
+                );
+#endif
 
             delete Symbol;
         }
@@ -422,7 +454,11 @@ VOID Fini(INT32 ExitCode, VOID *v)
             const string *Symbol = LookupSymbol((*it).first);
 
             // dump single routine information
+#if _WIN64
+            fprintf(f, "0x%.8llx:%s:%d\r\n", (*it).first, Symbol->c_str(), (*it).second);
+#else
             fprintf(f, "0x%.8x:%s:%d\r\n", (*it).first, Symbol->c_str(), (*it).second);
+#endif
 
             delete Symbol;
         }
@@ -448,12 +484,21 @@ VOID Fini(INT32 ExitCode, VOID *v)
             if (m_ModuleList.find(ModuleName) != m_ModuleList.end())
             {
                 // dump single routine information
+#if _WIN64
+                fprintf(
+                    f, "0x%.8llx:0x%.8llx:%s\r\n",
+                    m_ModuleList[ModuleName].first, 
+                    m_ModuleList[ModuleName].second,
+                    (*it).c_str()
+                );
+#else
                 fprintf(
                     f, "0x%.8x:0x%.8x:%s\r\n",
                     m_ModuleList[ModuleName].first, 
                     m_ModuleList[ModuleName].second,
                     (*it).c_str()
-                );            
+                    );            
+#endif
             }            
         }
 

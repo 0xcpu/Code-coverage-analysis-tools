@@ -39,15 +39,61 @@ typedef BOOL (WINAPI * SYMLIB_ENUM_HANDLER)(
     PENUM_CONTEXT Context
 );
 
-#ifdef PYTHON25
-#define PYTHON_MODULE_NAME "symlib25"
-#elif PYTHON26
-#define PYTHON_MODULE_NAME "symlib"
+#ifdef PYTHON36
+#define PYTHON_MODULE_NAME "symlib36"
+#define GETSTATE(m) ((struct module_state*)PyModule_GetState(m))
 #else
 #error Python version is not specified
 #endif
 
+struct module_state {
+    PyObject *error;
+};
+
+
+PyObject *addrbyname(PyObject* self, PyObject* pArgs);
+PyObject *namebyaddr(PyObject* self, PyObject* pArgs);
+PyObject *bestbyaddr(PyObject* self, PyObject* pArgs);
+
+// Module methods
+static PyMethodDef m_Methods[] = 
+{
+    { "addrbyname", addrbyname, METH_VARARGS, "Get symbol offset by name."                    },
+    { "namebyaddr", namebyaddr, METH_VARARGS, "Get symbol name by offset."                    },
+    { "bestbyaddr", bestbyaddr, METH_VARARGS, "Get the more suitable symbol name by address." },
+    { NULL,         NULL,       0,            NULL                                            }
+};
+
+
+static int  m_module_traverse(PyObject *m, visitproc visit, void *arg)
+{
+    Py_VISIT(GETSTATE(m)->error);
+
+    return 0;
+}
+
+static int m_module_clear(PyObject *m)
+{
+    Py_CLEAR(GETSTATE(m)->error);
+
+    return 0;
+}
+
+static struct PyModuleDef moduledef = {
+    PyModuleDef_HEAD_INIT,
+    PYTHON_MODULE_NAME,
+    NULL,
+    sizeof(struct module_state),
+    m_Methods,
+    NULL,
+    m_module_traverse,
+    m_module_clear,
+    NULL
+};
+
 MODULES_LIST m_ModulesList;
+
+
 //--------------------------------------------------------------------------------------
 char *GetNameFromFullPath(const char *lpszPath)
 {
@@ -308,7 +354,7 @@ PyObject *namebyaddr(PyObject* self, PyObject* pArgs)
     {
         if (Context.lpszSymbolName)
         {
-            Ret = PyString_FromString((const char *)Context.lpszSymbolName);
+            Ret = PyUnicode_FromString((const char *)Context.lpszSymbolName);
 
             free(Context.lpszSymbolName);
             Py_DECREF(Py_None);
@@ -356,7 +402,7 @@ PyObject *bestbyaddr(PyObject* self, PyObject* pArgs)
                 if (Context.lpszSymbolName)
                 {                    
                     Ret = PyList_New(0);
-                    PyList_Insert(Ret, 0, PyString_FromString((const char *)Context.lpszSymbolName));
+                    PyList_Insert(Ret, 0, PyUnicode_FromString((const char *)Context.lpszSymbolName));
                     PyList_Insert(Ret, 1, PyLong_FromUnsignedLong(Context.dwBestSymbolDelta));
 
                     free(Context.lpszSymbolName);
@@ -386,21 +432,23 @@ end:
 
     return Ret;
 }
-//--------------------------------------------------------------------------------------
-static PyMethodDef m_Methods[] = 
-{
-    { "addrbyname", addrbyname, METH_VARARGS, "Get symbol offset by name."                      },
-    { "namebyaddr", namebyaddr, METH_VARARGS, "Get symbol name by offset."                      },
-    { "bestbyaddr", bestbyaddr, METH_VARARGS, "Get the more suitable symbol name by address."   },
-    { NULL,         NULL,       0,            NULL                                              }
-};
 
-BOOL SymlibInitialize(void)
+PyObject *SymlibInitialize(void)
 {   
     // initialize python module
-    Py_InitModule(PYTHON_MODULE_NAME, m_Methods);
+    PyObject *module = PyModule_Create(&moduledef);
+    if (module == NULL) {
+        return NULL;
+    }
+    struct module_state *st = GETSTATE(module);
+    st->error = PyErr_NewException("symlib.Error", NULL, NULL);
+    if (st->error == NULL) {
+        Py_DECREF(module);
 
-    return TRUE;
+        return NULL;
+    }
+
+    return module;
 }
 //--------------------------------------------------------------------------------------
 BOOL SymlibUninitialize(void)
@@ -421,15 +469,11 @@ BOOL SymlibUninitialize(void)
     return TRUE;
 }
 //--------------------------------------------------------------------------------------
-PyMODINIT_FUNC initsymlib(void)
+PyObject *PyInit_symlib(void)
 {
-    SymlibInitialize();
+    return SymlibInitialize();
 }
-//--------------------------------------------------------------------------------------
-PyMODINIT_FUNC initsymlib25(void)
-{
-    SymlibInitialize();
-}
+
 //--------------------------------------------------------------------------------------
 BOOL APIENTRY DllMain( 
     HMODULE hModule,

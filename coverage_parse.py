@@ -314,12 +314,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if not os.path.isfile(fname):
-
         print("[!] Error while opening input file")
         sys.exit(-1)
 
     if not os.path.isfile(fname_modules):
-
         print("[!] Error while opening modules log")
         sys.exit(-1)
 
